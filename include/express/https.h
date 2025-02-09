@@ -204,10 +204,11 @@ public: query_t params;
                query::parse( url::normalize( "?" + self->read() ) )
           )); return; } 
 
-          auto input_parse = [=]( string_t inp ){
-          coStart
+          auto input_parse = [=]( string_t inp ){ static uint _state_=0;
+               if( inp.empty() ){ _state_=0; return -1; }
+          gnStart
 
-               do { if( inp.empty() ){ coEnd; }
+               do {
                     
                     auto data = regex::search( inp, "\r\n\r\n" ); if( data.empty() ) { coEnd; }
                     auto hdr  = inp.splice(0,data[0]); header_t obj; 
@@ -236,15 +237,13 @@ public: query_t params;
                     auto list = (*done)[obj["name"]].as<array_t<object_t>>(); auto name = obj["name"];
                     obj.erase("name"); list.push( json::parse( obj ) ); (*done)[name] = list;
 
-               } while(0); while( !inp.empty() ) {
-                    if( !file->is_available() ){ coEnd; } 
-                         file->write( inp );    coNext; 
-               }
+               } while(0); while( !file->is_closed() ) { file->write( inp ); coNext; }
 
-          coStop
+          gnStop
           };
 
-          process::add([=](){
+          process::poll::add([=](){
+               if( self->is_closed() ){ rej(except_t( "something went wrong" )); return -1; }
           coStart
 
                while( *len>0 && self->is_available() ) {
@@ -345,7 +344,7 @@ public: query_t params;
 
      const express_https_t& render( string_t path ) const noexcept { 
           if( exp->state == 0 ){ return (*this); }
-		auto cb = _express_::ssr(); send();  
+          send(); auto cb = _express_::ssr();
           process::poll::add( cb, *this, path ); 
           return (*this);
      }
@@ -363,6 +362,7 @@ public: query_t params;
 
      const express_https_t& send() const noexcept { 
           if( exp->state == 0 ){ return (*this); }
+        //header( "Transfer-Encoding", "chunked" );
           write_header(exp->status,exp->_headers); 
           exp->state = 0; return (*this);
      }
@@ -676,13 +676,10 @@ namespace nodepp { namespace express { namespace https {
 
                if( fs::exists_file(dir+".html") == true ){ dir += ".html"; }
                if( fs::exists_file(dir) == false || dir == base ){
+               if( !path::extname( dir ).empty() ){ cli.status(404).send("not_found"); return; }
                if( fs::exists_file( path::join( base, "404.html" ) )){
-                   dir = path::join( base, "404.html" );
-                   cli.status(404);
-               } else { 
-                   cli.status(404).send("Oops 404 Error"); 
-                   return; 
-               }}
+                   dir = path::join( base, "404.html" ); cli.status(404);
+               } else { cli.status(404).send("Oops 404 Error"); return; } }
 
                if ( cli.headers["Range"].empty() == true ){
 
