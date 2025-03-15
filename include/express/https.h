@@ -97,7 +97,7 @@ namespace nodepp { namespace _express_ {
 
                          http::fetch( args ).fail([=](...){ *self->state=0; })
                                             .then([=]( http_t cli ){
-                              if( !str.is_available() ){ return; } cli.set_timeout(1000);
+                              if( !str.is_available() ){ return; }
                               cli.onData([=]( string_t data ){ str.write(data); });
                               cli.onDrain.once([=](){ *self->state=0; });
                               stream::pipe( cli );
@@ -119,7 +119,7 @@ namespace nodepp { namespace _express_ {
 
                          https::fetch( args, &ssl ).fail([=](...){ *self->state=0; })
                                                    .then([=]( https_t cli ){
-                              if( !str.is_available() ){ return; } cli.set_timeout(1000);
+                              if( !str.is_available() ){ return; }
                               cli.onData([=]( string_t data ){ str.write(data); });
                               cli.onDrain.once([=](){ *self->state=0; });
                               stream::pipe( cli );
