@@ -59,16 +59,16 @@ namespace nodepp { namespace _express_ {
           gnStart
 
                if( !url::is_valid( path ) ){
-               if( path.size()<25 && !str.params[path].empty() )
+               if( path.size()<25 && str.has(path) )
                  { while( gen( &str, str.params[path] )==1 ){ coNext; } coEnd; }
                if( !fs::exists_file(path) ){ coGoto(1); }
-                    
+
                     do{ auto file = fs::readable(path);
                               raw = stream::await(file);
                               gen = _file_::write(); pos=0; sop=0;
                             match = regex::search_all(raw,"<°[^°]+°>");
                     } while(0); while( sop != match.size() ){
-                         
+
                          reg = match[sop]; cb = new ssr(); do {
                          auto war = raw.slice( reg[0], reg[1] );
                               dir = regex::match( war,"[^<°> \n\t]+" );
@@ -128,12 +128,12 @@ namespace nodepp { namespace _express_ {
                     } while(0); while( *state==1 ){ coNext; } }
 
                     else { coYield(1);
-                    
+
                          do{  raw = path;
                               gen = _file_::write(); pos=0; sop=0;
                             match = regex::search_all(raw,"<°[^°]+°>");
                          } while(0); while( sop != match.size() ){
-                              
+
                               reg = match[sop]; cb = new ssr(); do {
                               auto war = raw.slice( reg[0], reg[1] );
                                    dir = regex::match( war,"[^<°> \n\t]+" );
@@ -209,11 +209,11 @@ public: query_t params;
           gnStart
 
                do {
-                    
+
                     auto data = regex::search( inp, "\r\n\r\n" ); if( data.empty() ) { coEnd; }
                     auto hdr  = inp.splice(0,data[0]); header_t obj;
                                 inp.splice(0,4); file->close();
-                    
+
                     ptr_t<regex_t> regs ({
                          regex_t( "filename=\"([^\"]+)\"" ),
                          regex_t( "Content-Type: (.+)" ),
@@ -232,7 +232,7 @@ public: query_t params;
                          obj["path"] = path::join( "/tmp", sha.get() + ".tmp" );
                         *file = fs::writable( obj["path"] );
                     }
-                    
+
                     if( !(*done)[obj["name"]].has_value() ){ (*done)[obj["name"]] = array_t<object_t>(); }
                     auto list = (*done)[obj["name"]].as<array_t<object_t>>(); auto name = obj["name"];
                     obj.erase("name"); list.push( json::parse( obj ) ); (*done)[name] = list;
