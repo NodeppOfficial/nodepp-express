@@ -39,121 +39,134 @@
 #define NODEPP_EXPRESS_GENERATOR
 namespace nodepp { namespace _express_ {
 
+GENERATOR( ssr ) {
+protected:
 
-     GENERATOR( ssr ) {
-     protected:
+      ptr_t<bool> state = new bool(0);
+      array_t<ptr_t<ulong>> match;
+      string_t      raw, dir;
+      ulong         pos, sop;
+      _file_::write gen;
+      ptr_t<ulong>  reg;
+      ptr_t<ssr>    cb;
 
-          ptr_t<bool> state = new bool(0);
-          array_t<ptr_t<ulong>> match;
-          string_t      raw, dir;
-          ulong         pos, sop;
-          _file_::write gen;
-          ptr_t<ulong>  reg;
-          ptr_t<ssr>    cb;
+protected:
 
-     public:
+     void set( string_t data ){
+         gen   = _file_::write();
+         raw   = data; pos=0; sop=0;
+         match = regex::search_all(raw,"<°[^°]+°>");
+     }
 
-          template< class T >
-          coEmit( T& str, string_t path ){
-              if( !str.is_available() ){ return -1; }
-          gnStart
+public:
 
-               if( !url::is_valid( path ) ){
-               if( path.size()<25 && str.has(path) )
-                 { while( gen( &str, str.params[path] )==1 ){ coNext; } coEnd; }
-               if( !fs::exists_file(path) ){ coGoto(1); }
+      template< class T >
+      coEmit( T& str, string_t path ){
+          if( !str.is_available() ){ return -1; }
+      gnStart
 
-                    do{ auto file = fs::readable(path);
-                              raw = stream::await(file);
-                              gen = _file_::write(); pos=0; sop=0;
-                            match = regex::search_all(raw,"<°[^°]+°>");
-                    } while(0); while( sop != match.size() ){
+           if( !url::is_valid( path ) ){
 
-                         reg = match[sop]; cb = new ssr(); do {
-                         auto war = raw.slice( reg[0], reg[1] );
-                              dir = regex::match( war,"[^<°> \n\t]+" );
-                         } while(0);
+           if( path.size()<25 && !str.params[path].empty() ){
+               set( str.params[path] ); while( sop != match.size() ){
 
-                         while( gen( &str, raw.slice( pos, reg[0] ) )==1 )
-                              { coNext; } pos = match[sop][1]; sop++;
+                   reg = match[sop]; cb = new ssr(); do {
+                   auto war = raw.slice( reg[0], reg[1] );
+                        dir = regex::match( war,"[^<°> \n\t]+" );
+                   } while(0);
 
-                         while( (*cb)( str, dir )==1 ){ coNext; }
+                   while( gen( &str, raw.slice( pos, reg[0] ) )==1 )
+                        { coNext; } pos = match[sop][1]; sop++;
 
-                    } while( gen( &str, raw.slice( pos ) )==1 ){ coNext; }
+                   while( (*cb)( str, dir )==1 ){ coNext; }
 
-               } else {
+               } while( gen( &str, raw.slice( pos ) )==1 ){ coNext; }
+           coEnd; }
 
-                    if( url::protocol(path)=="http" ){ do {
-                         auto self = type::bind( this );
-                         fetch_t args; *state=1;
+           if( !fs::exists_file(path) ){ coGoto(1); }
+                set( fs::read_file(path) ); while( sop != match.size() ){
 
-                         args.url     = path;
-                         args.method  = "GET";
-                         args.headers = header_t({
-                              { "Params", query::format( str.params ) },
-                              { "User-Agent", "Nodepp Fetch" },
-                              { "Host", url::hostname(path) }
-                         });
+                     reg = match[sop]; cb = new ssr(); do {
+                     auto war = raw.slice( reg[0], reg[1] );
+                          dir = regex::match( war,"[^<°> \n\t]+" );
+                     } while(0);
 
-                         http::fetch( args ).fail([=](...){ *self->state=0; })
-                                            .then([=]( http_t cli ){
-                              if( !str.is_available() ){ return; }
-                              cli.onData([=]( string_t data ){ str.write(data); });
-                              cli.onDrain.once([=](){ *self->state=0; });
-                              stream::pipe( cli );
-                         });
+                     while( gen( &str, raw.slice( pos, reg[0] ) )==1 )
+                          { coNext; } pos = match[sop][1]; sop++;
 
-                    } while(0); while( *state==1 ){ coNext; } }
+                     while( (*cb)( str, dir )==1 ){ coNext; }
 
-                    elif( url::protocol(path)=="https" ){ do {
-                         ssl_t ssl; fetch_t args; *state=1;
-                         auto self = type::bind( this );
+                } while( gen( &str, raw.slice( pos ) )==1 ){ coNext; }
+           coEnd; }
 
-                         args.url     = path;
-                         args.method  = "GET";
-                         args.headers = header_t({
-                              { "Params", query::format( str.params ) },
-                              { "User-Agent", "Nodepp Fetch" },
-                              { "Host", url::hostname(path) }
-                         });
+           else {
 
-                         https::fetch( args, &ssl ).fail([=](...){ *self->state=0; })
-                                                   .then([=]( https_t cli ){
-                              if( !str.is_available() ){ return; }
-                              cli.onData([=]( string_t data ){ str.write(data); });
-                              cli.onDrain.once([=](){ *self->state=0; });
-                              stream::pipe( cli );
-                         });
+                if( url::protocol(path)=="http" ){ do {
+                     auto self = type::bind( this );
+                     fetch_t args; *state=1;
 
-                    } while(0); while( *state==1 ){ coNext; } }
+                     args.url     = path;
+                     args.method  = "GET";
+                     args.headers = header_t({
+                          { "Params", query::format( str.params ) },
+                          { "User-Agent", "Nodepp Fetch" },
+                          { "Host", url::hostname(path) }
+                     });
 
-                    else { coYield(1);
+                     http::fetch( args ).fail([=](...){ *self->state=0; })
+                                        .then([=]( http_t cli ){
+                          if( !str.is_available() ){ return; }
+                          cli.onData([=]( string_t data ){ str.write(data); });
+                          cli.onDrain.once([=](){ *self->state=0; });
+                          stream::pipe( cli );
+                     });
 
-                         do{  raw = path;
-                              gen = _file_::write(); pos=0; sop=0;
-                            match = regex::search_all(raw,"<°[^°]+°>");
-                         } while(0); while( sop != match.size() ){
+                } while(0); while( *state==1 ){ coNext; } }
 
-                              reg = match[sop]; cb = new ssr(); do {
-                              auto war = raw.slice( reg[0], reg[1] );
-                                   dir = regex::match( war,"[^<°> \n\t]+" );
-                              } while(0);
+                elif( url::protocol(path)=="https" ){ do {
+                     ssl_t ssl; fetch_t args; *state=1;
+                     auto self = type::bind( this );
 
-                              while( gen( &str, raw.slice( pos, reg[0] ) )==1 )
-                                   { coNext; } pos = match[sop][1]; sop++;
+                     args.url     = path;
+                     args.method  = "GET";
+                     args.headers = header_t({
+                          { "Params", query::format( str.params ) },
+                          { "User-Agent", "Nodepp Fetch" },
+                          { "Host", url::hostname(path) }
+                     });
 
-                              while( (*cb)( str, dir )==1 ){ coNext; }
+                     https::fetch( args, &ssl ).fail([=](...){ *self->state=0; })
+                                               .then([=]( https_t cli ){
+                          if( !str.is_available() ){ return; }
+                          cli.onData([=]( string_t data ){ str.write(data); });
+                          cli.onDrain.once([=](){ *self->state=0; });
+                          stream::pipe( cli );
+                     });
 
-                         } while( gen( &str, raw.slice( pos ) )==1 ){ coNext; }
+                } while(0); while( *state==1 ){ coNext; } }
 
-                    }
+                else {
+                    coYield(1); set( path ); while( sop != match.size() ){
 
-               }
+                          reg = match[sop]; cb = new ssr(); do {
+                          auto war = raw.slice( reg[0], reg[1] );
+                               dir = regex::match( war,"[^<°> \n\t]+" );
+                          } while(0);
 
-          gnStop
-          }
+                          while( gen( &str, raw.slice( pos, reg[0] ) )==1 )
+                               { coNext; } pos = match[sop][1]; sop++;
 
-     };
+                          while( (*cb)( str, dir )==1 ){ coNext; }
+
+                     } while( gen( &str, raw.slice( pos ) )==1 ){ coNext; }
+                coEnd; }
+
+           }
+
+      gnStop
+      }
+
+};
 
 }}
 #endif
