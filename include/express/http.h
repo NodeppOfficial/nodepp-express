@@ -109,7 +109,6 @@ public:
                      args.method  = "GET";
                      args.headers = header_t({
                           { "Params", query::format( str.params ) },
-                          { "User-Agent", "Nodepp Fetch" },
                           { "Host", url::hostname(path) }
                      });
 
@@ -131,7 +130,6 @@ public:
                      args.method  = "GET";
                      args.headers = header_t({
                           { "Params", query::format( str.params ) },
-                          { "User-Agent", "Nodepp Fetch" },
                           { "Host", url::hostname(path) }
                      });
 
