@@ -385,7 +385,7 @@ public: query_t params;
 
      const express_http_t& done() const noexcept {
           if( exp->state == 0 ){ return (*this); }
-          exp->state = 0; return (*this);
+              exp->state =  0;   return (*this);
      }
 
 };}

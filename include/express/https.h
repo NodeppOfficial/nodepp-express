@@ -229,7 +229,7 @@ public: query_t params;
 
      express_https_t ( https_t& cli ) noexcept : https_t( cli ), exp( new NODE() ) { exp->state = 1; }
 
-    ~express_https_t () noexcept { if( exp.count() > 1 ){ return; } exp->state = 0; free(); }
+    ~express_https_t () noexcept { if( exp.count() > 1 ){ return; } exp->state=0; free(); }
 
      express_https_t () noexcept : exp( new NODE() ) { exp->state = 0; }
 
@@ -385,7 +385,7 @@ public: query_t params;
 
      const express_https_t& done() const noexcept {
           if( exp->state == 0 ){ return (*this); }
-          exp->state = 0; return (*this);
+              exp->state =  0;   return (*this);
      }
 
 };}
