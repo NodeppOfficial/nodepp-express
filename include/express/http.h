@@ -102,44 +102,49 @@ public:
            else {
 
                 if( url::protocol(path)=="http" ){ do {
-                     auto self = type::bind( this );
-                     fetch_t args; *state=1;
+                    auto self = type::bind( this );
+                    auto uri = url::parse( path );
+                         uri.query = str.query;
 
-                     args.url     = path;
-                     args.method  = "GET";
-                     args.headers = header_t({
-                          { "Params", query::format( str.params ) },
-                          { "Host", url::hostname(path) }
-                     });
+                    fetch_t args; *state=1;
 
-                     http::fetch( args ).fail([=](...){ *self->state=0; })
-                                        .then([=]( http_t cli ){
-                          if( !str.is_available() ){ return; }
-                          cli.onData([=]( string_t data ){ str.write(data); });
-                          cli.onDrain.once([=](){ *self->state=0; });
-                          stream::pipe( cli );
-                     });
+                    args.method  = "GET";
+                    args.url     = url::format(uri);
+                    args.headers = header_t({
+                        { "Params", query::format( str.params ) },
+                        { "Host", url::hostname(path) }
+                    });
+
+                    http::fetch( args ).fail([=](...){ *self->state=0; })
+                                       .then([=]( http_t cli ){
+                        if( !str.is_available() ){ return; }
+                        cli.onData([=]( string_t data ){ str.write(data); });
+                        cli.onDrain.once([=](){ *self->state=0; });
+                        stream::pipe( cli );
+                    });
 
                 } while(0); while( *state==1 ){ coNext; } }
 
                 elif( url::protocol(path)=="https" ){ do {
-                     ssl_t ssl; fetch_t args; *state=1;
-                     auto self = type::bind( this );
+                    ssl_t ssl; fetch_t args; *state=1;
+                    auto self = type::bind( this );
+                    auto uri  = url::parse( path );
+                         uri.query = str.query;
+ 
+                    args.method  = "GET";
+                    args.url     = url::format(uri);
+                    args.headers = header_t({
+                        { "Params", query::format( str.params ) },
+                        { "Host", url::hostname(path) }
+                    });
 
-                     args.url     = path;
-                     args.method  = "GET";
-                     args.headers = header_t({
-                          { "Params", query::format( str.params ) },
-                          { "Host", url::hostname(path) }
-                     });
-
-                     https::fetch( args, &ssl ).fail([=](...){ *self->state=0; })
-                                               .then([=]( https_t cli ){
-                          if( !str.is_available() ){ return; }
-                          cli.onData([=]( string_t data ){ str.write(data); });
-                          cli.onDrain.once([=](){ *self->state=0; });
-                          stream::pipe( cli );
-                     });
+                    https::fetch( args, &ssl ).fail([=](...){ *self->state=0; })
+                                              .then([=]( https_t cli ){
+                        if( !str.is_available() ){ return; }
+                        cli.onData([=]( string_t data ){ str.write(data); });
+                        cli.onDrain.once([=](){ *self->state=0; });
+                        stream::pipe( cli );
+                    });
 
                 } while(0); while( *state==1 ){ coNext; } }
 
@@ -385,7 +390,7 @@ public: query_t params;
 
      const express_http_t& done() const noexcept {
           if( exp->state == 0 ){ return (*this); }
-              exp->state =  0;   return (*this);
+          exp->state = 0; return (*this);
      }
 
 };}
@@ -677,7 +682,7 @@ namespace nodepp { namespace express { namespace http {
                     if( regex::test(path::mimetype(dir),"audio|video",true) ){ cli.send(); return; }
                     if( regex::test(path::mimetype(dir),"html",true) ){ cli.render(dir); } else {
                         cli.header( "Cache-Control", "public, max-age=604800" );
-			         cli.sendFile( dir );
+			            cli.sendFile( dir );
                     }
 
                } else { auto str = fs::readable( dir );

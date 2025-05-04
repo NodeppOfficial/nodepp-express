@@ -102,32 +102,37 @@ public:
            else {
 
                 if( url::protocol(path)=="http" ){ do {
-                     auto self = type::bind( this );
-                     fetch_t args; *state=1;
+                    auto self = type::bind( this );
+                    auto uri = url::parse( path );
+                         uri.query = str.query;
+                    
+                    fetch_t args; *state=1;
+ 
+                    args.method  = "GET";
+                    args.url     = url::format(uri);
+                    args.headers = header_t({
+                        { "Params", query::format( str.params ) },
+                        { "Host", url::hostname(path) }
+                    });
 
-                     args.url     = path;
-                     args.method  = "GET";
-                     args.headers = header_t({
-                          { "Params", query::format( str.params ) },
-                          { "Host", url::hostname(path) }
-                     });
-
-                     http::fetch( args ).fail([=](...){ *self->state=0; })
-                                        .then([=]( http_t cli ){
-                          if( !str.is_available() ){ return; }
-                          cli.onData([=]( string_t data ){ str.write(data); });
-                          cli.onDrain.once([=](){ *self->state=0; });
-                          stream::pipe( cli );
-                     });
+                    http::fetch( args ).fail([=](...){ *self->state=0; })
+                                       .then([=]( http_t cli ){
+                        if( !str.is_available() ){ return; }
+                        cli.onData([=]( string_t data ){ str.write(data); });
+                        cli.onDrain.once([=](){ *self->state=0; });
+                        stream::pipe( cli );
+                    });
 
                 } while(0); while( *state==1 ){ coNext; } }
 
                 elif( url::protocol(path)=="https" ){ do {
-                     ssl_t ssl; fetch_t args; *state=1;
-                     auto self = type::bind( this );
-
-                     args.url     = path;
+                    ssl_t ssl; fetch_t args; *state=1;
+                    auto self = type::bind( this );
+                    auto uri  = url::parse( path );
+                         uri.query = str.query;
+ 
                      args.method  = "GET";
+                     args.url     = url::format(uri);
                      args.headers = header_t({
                           { "Params", query::format( str.params ) },
                           { "Host", url::hostname(path) }
@@ -229,7 +234,7 @@ public: query_t params;
 
      express_https_t ( https_t& cli ) noexcept : https_t( cli ), exp( new NODE() ) { exp->state = 1; }
 
-    ~express_https_t () noexcept { if( exp.count() > 1 ){ return; } exp->state=0; free(); }
+    ~express_https_t () noexcept { if( exp.count() > 1 ){ return; } exp->state = 0; free(); }
 
      express_https_t () noexcept : exp( new NODE() ) { exp->state = 0; }
 
@@ -385,7 +390,7 @@ public: query_t params;
 
      const express_https_t& done() const noexcept {
           if( exp->state == 0 ){ return (*this); }
-              exp->state =  0;   return (*this);
+          exp->state = 0; return (*this);
      }
 
 };}
