@@ -198,7 +198,7 @@ public:
             }
 
             if( !(*done)[obj["name"]].has_value() ){ (*done)[obj["name"]] = array_t<object_t>(); }
-            auto list = (*done)[obj["name"]].as<array_t<object_t>>(); auto name = obj["name"];
+            auto list=(*done)[obj["name"]].as<array_t<object_t>>(); auto name = obj["name"];
             obj.erase("name"); list.push( json::parse( obj ) ); (*done)[name] = list;
 
         } catch(...) { coEnd; } 
@@ -247,7 +247,7 @@ public: query_t params;
         auto self = type::bind( this );
 
     return promise_t<object_t,except_t>( [=]( function_t<void,object_t> res, function_t<void,except_t> rej ){
-        if( self->headers["Content-Length"].empty() ){ rej( except_t( "content length mismatch" ) ); return; }
+        if( !self->headers.has("Content-Length") ){ rej( except_t( "content length mismatch" ) ); return; }
 
         auto len = type::bind( string::to_long( self->headers["Content-Length"] ) );
         auto bon = regex::match( self->headers["Content-Type"], "boundary=[^ ]+" ).slice(9);
@@ -259,7 +259,7 @@ public: query_t params;
             if( self->is_closed() ){ rej(except_t( "something went wrong" )); return -1; }
         coStart
 
-           while( *len>0 && self->is_available() ) {
+        while( *len>0 && self->is_available() ) {
            while((*read)( &self, bon )==1){ coNext;    }
               if( read->data == "--" )    { coGoto(1); }
               if( read->data == "--\r\n" ){ break; }
@@ -453,8 +453,9 @@ protected:
     }
 
     string_t normalize( string_t base, string_t path ) const noexcept {
-    return base.empty() ? ("/"+path) : path.empty() ?
-                          ("/"+base) : path::join( base, path );
+    auto new_path =  base.empty() ? ("/"+path) : path.empty() ?
+                                    ("/"+base) : path::join( base, path );
+    return path::normalize( new_path );
     }
 
 public:
@@ -637,7 +638,7 @@ public:
         auto self = type::bind( this );
 
         function_t<void,http_t> cb = [=]( http_t cli ){
-            express_http_t res(cli); if(!cli.headers["Params"].empty() ){
+            express_http_t res(cli); if( cli.headers.has("Params") ){
                 res.params= query::parse( cli.headers["Params"] );
             }   self->run( nullptr, res );
         };
@@ -658,7 +659,7 @@ namespace nodepp { namespace express { namespace http {
 
         app.ALL([=]( express_http_t& cli ){
 
-            auto pth = regex::replace( cli.path, app.get_path(), "/" );
+            auto pth = regex::replace( cli.path, app.get_path().slice(1), "/" );
                  pth = regex::replace_all( pth, "\\.[.]+/", "" );
 
             auto dir = pth.empty()? path::join( base, "" ) :
@@ -667,14 +668,14 @@ namespace nodepp { namespace express { namespace http {
             if( dir.empty() ){ dir = path::join( base, "index.html" ); }
             if( dir[dir.last()] == '/' ){ dir += "index.html"; }
 
-            if( fs::exists_file(dir+".html") == true ){ dir += ".html"; }
-            if( fs::exists_file(dir) == false || dir == base ){
-            if( !path::extname( dir ).empty() ){ cli.status(404).send("not_found"); return; }
+            if( fs::exists_file(dir+".html")== true ){ dir += ".html"; }
+            if(!fs::exists_file(dir) || dir == base ){
+            if(!path  ::extname(dir).empty() ){ cli.status(404).send("not_found"); return; }
             if( fs::exists_file( path::join( base, "404.html" ) )){
                 dir = path::join( base, "404.html" ); cli.status(404);
             } else { cli.status(404).send("Oops 404 Error"); return; } }
 
-            if( cli.headers["Range"].empty() == true ){
+            if( !cli.headers.has("Range") ){
 
                 if( regex::test(path::mimetype(dir),"audio|video",true) ){ cli.send(); return; }
                 if( regex::test(path::mimetype(dir),"html",true) ){ cli.render(dir); } else {
