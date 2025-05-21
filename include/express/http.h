@@ -167,7 +167,8 @@ public:
 
     template< class T >
     coEmit( const T& file, const ptr_t<object_t>& done, string_t raw ) {
-        static uint _state_=0; if( raw.empty() ){ _state_=0; return -1; }
+        static uint _state_=0; if( raw.empty() )      { _state_=0; return -1; }
+                               if( file->is_closed() ){ _state_=0; return -1; } 
     gnStart
 
         try { 
