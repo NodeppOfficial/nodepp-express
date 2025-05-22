@@ -42,118 +42,144 @@ namespace nodepp { namespace _express_ {
 GENERATOR( ssr ) {
 protected:
 
-    ptr_t<bool> state = new bool(0);
+    _file_::until rdd; _file_::write wrt;
+    ptr_t<bool> child=new bool(0);
+    ptr_t<bool> state=new bool(0);
     array_t<ptr_t<ulong>> match;
     string_t      raw, dir;
     ulong         pos, sop;
-    _file_::write gen;
+    file_t        file;
     ptr_t<ulong>  reg;
     ptr_t<ssr>    cb;
 
 protected:
 
+    void next() {
+    auto war=raw.slice( reg[0], reg[1] );
+         dir=regex::match( war,"[^<°> \n\t]+" );
+    }
+
     void set( string_t data ){
-        gen   = _file_::write();
-        raw   = data; pos=0; sop=0;
-        match = regex::search_all(raw,"<°[^°]+°>");
+        raw  =data; pos=0; sop=0;
+        match=regex::search_all(raw,"<°[^°]+°>");
     }
 
 public:
 
+    ssr()       : child(new bool(0)) {}
+    ssr( bool ) : child(new bool(1)) {}
+
     template< class T >
     coEmit( T& str, string_t path ){
+        
         if( !str.is_available() ){ return -1; }
+        if( *state == 1 )        { return  1; }
+
+        if( str.get_borrow().size()>CHUNK_SIZE ){ 
+            while( wrt(&str,str.get_borrow())==1 );
+            str.set_borrow(nullptr); return 1; 
+        }
+
     gnStart
 
-        if( !url::is_valid( path ) ){
-        if( path.size()<25 && str.params.has(path) ){
-            set( str.params[path] ); while( sop != match.size() ){
+        if( path.size()<=MAX_PATH ){
 
-                reg = match[sop]; cb = new ssr(); do {
-           auto war = raw.slice( reg[0], reg[1] );
-                dir = regex::match( war,"[^<°> \n\t]+" ); } while(0);
+            if( !url::is_valid(path) ){
+            if( str.params.has(path) ){
+                set( str.params[path] ); while( sop!=match.size() ){
+    
+                reg=match[sop]; cb=new ssr(1); next(); 
+                str.get_borrow()+=raw.slice( pos, reg[0] );
+                pos=match[sop][1];sop++;coWait((*cb)(str,dir)==1 );
+    
+            } coGoto(2);
+            } elif( !fs::exists_file( path ) ){ coGoto(1); }
+                
+                file=fs::readable(path); cb=new ssr(1); 
+                rdd =_file_::until(); set( nullptr ); 
+                
+                while( file.is_available() ){
 
-            while( gen( &str, raw.slice( pos, reg[0] ) )==1 )
-                 { coNext; } pos = match[sop][1]; sop++;
+                    do { if( pos%2==0 ){ dir="<°"; }
+                         if( pos%2!=0 ){ dir="°>"; }
+                         coWait( rdd( &file, dir )==1 ); 
+                    } while(0);
 
-            while( (*cb)( str, dir )==1 ){ coNext; }
+                    if( rdd.state<=MAX_PATH && regex::test(rdd.data,dir) ){
+                        pos++; continue; 
+                    } elif( rdd.state<=MAX_PATH && pos%2!=0 ) {
+                        dir=regex::match( rdd.data,"[^<°> \n\t]+" );
+                        if( dir.empty() ){ continue; }
+                        coWait((*cb)( str, dir )==1 );
+                    } else {
+                        str.get_borrow()+=rdd.data;
+                    }
 
-        } while( gen( &str, raw.slice( pos ) )==1 ){ coNext; } coEnd; }
+            } coGoto(4);
+            } else {
 
-        if( !fs::exists_file(path) ){ coGoto(1); }
-            set( fs::read_file(path) ); while( sop != match.size() ){
-
-                reg = match[sop]; cb = new ssr(); do {
-           auto war = raw.slice( reg[0], reg[1] );
-                dir = regex::match( war,"[^<°> \n\t]+" ); } while(0);
-
-            while( gen( &str, raw.slice( pos, reg[0] ) )==1 )
-                 { coNext; } pos = match[sop][1]; sop++;
-
-            while( (*cb)( str, dir )==1 ){ coNext; }
-
-        } while( gen( &str, raw.slice( pos ) )==1 ){ coNext; } coEnd; }
-
-        else {
-
-            if( url::protocol(path)=="http" ){ do {
-                auto self = type::bind( this );
-                fetch_t args; *state=1;
+                if( url::protocol( path )=="http" ){ do {
                     
-                args.url     = path;
-                args.method  = "GET";
-                args.query   = str.query;
-                args.headers = header_t({
-                    { "Params", query::format( str.params ) },
-                    { "Host", url::hostname(path) }
-                });
+                    auto self = type::bind( this );
+                    auto strm = type::bind( str );
+                    fetch_t args; *state=1;
+                        
+                    args.url     = path;
+                    args.method  = "GET";
+                    args.query   = str.query;
+                    args.headers = header_t({
+                        { "Params", query::format( str.params ) },
+                        { "Host"  , url::hostname( path ) }
+                    });
+        
+                    http::fetch( args ).fail([=](...){ *self->state=0; })
+                                       .then([=]( http_t cli ){
+                        if( !str.is_available() ){ return; }
+                        cli.onData([=]( string_t data ){ strm->get_borrow()+=data; });
+                        cli.onDrain.once([=](){ *self->state=0; });
+                        stream::pipe( cli );
+                    });
+        
+                } while(0); coNext; 
+                } elif( url::protocol( path )=="https" ) { do {
 
-                http::fetch( args ).fail([=](...){ *self->state=0; })
-                                   .then([=]( http_t cli ){
-                    if( !str.is_available() ){ return; }
-                    cli.onData([=]( string_t data ){ str.write(data); });
-                    cli.onDrain.once([=](){ *self->state=0; });
-                    stream::pipe( cli );
-                });
+                    ssl_t ssl; fetch_t args; *state=1;
+                    auto self = type::bind( this );
+                    auto strm = type::bind( str );
+         
+                    args.url     = path;
+                    args.method  = "GET";
+                    args.query   = str.query;
+                    args.headers = header_t({
+                        { "Params", query::format( str.params ) },
+                        { "Host"  , url::hostname( path ) }
+                    });
+        
+                    https::fetch( args, &ssl ).fail([=](...){ *self->state=0; })
+                                              .then([=]( https_t cli ){
+                        if( !str.is_available() ){ return; }
+                        cli.onData([=]( string_t data ){ strm->get_borrow()+=data; });
+                        cli.onDrain.once([=](){ *self->state=0; });
+                        stream::pipe( cli );
+                    });
+        
+                } while(0); coNext; } coGoto(4);
 
-            } while(0); while( *state==1 ){ coNext; } }
+            }
 
-            elif( url::protocol(path)=="https" ){ do {
-                ssl_t ssl; fetch_t args; *state=1;
-                auto self = type::bind( this );
- 
-                args.url     = path;
-                args.method  = "GET";
-                args.query   = str.query;
-                args.headers = header_t({
-                    { "Params", query::format( str.params ) },
-                    { "Host", url::hostname(path) }
-                });
+        } else { coYield(1);
+            set( path ); while( sop!=match.size() ){
 
-                https::fetch( args, &ssl ).fail([=](...){ *self->state=0; })
-                                          .then([=]( https_t cli ){
-                    if( !str.is_available() ){ return; }
-                    cli.onData([=]( string_t data ){ str.write(data); });
-                    cli.onDrain.once([=](){ *self->state=0; });
-                    stream::pipe( cli );
-                });
+            reg=match[sop]; cb=new ssr(1); next();
+            str.get_borrow()+=raw.slice( pos, reg[0] );
+            pos=match[sop][1];sop++;coWait((*cb)(str,dir)==1 );
 
-            } while(0); while( *state==1 ){ coNext; } }
-
-            else {
-                coYield(1); set( path ); while( sop != match.size() ){
-
-                    reg = match[sop]; cb = new ssr(); do {
-               auto war = raw.slice( reg[0], reg[1] );
-                    dir = regex::match( war,"[^<°> \n\t]+" ); } while(0);
-
-                while( gen( &str, raw.slice( pos, reg[0] ) )==1 )
-                     { coNext; } pos = match[sop][1]; sop++;
-
-                while( (*cb)( str, dir )==1 ){ coNext; }
-
-            } while( gen( &str, raw.slice( pos ) )==1 ){ coNext; } coEnd; }
-
+        } coGoto(2); } coYield(2); 
+        
+        str.get_borrow()+=raw.slice(pos); coYield(4); 
+        if( !(*child) && !str.get_borrow().empty() ){
+            coWait( wrt(&str,str.get_borrow())==1 );
+            str.set_borrow( nullptr ); coEnd;
         }
 
     gnStop }
@@ -167,8 +193,7 @@ public:
 
     template< class T >
     coEmit( const T& file, const ptr_t<object_t>& done, string_t raw ) {
-        static uint _state_=0; if( raw.empty() )      { _state_=0; return -1; }
-                               if( file->is_closed() ){ _state_=0; return -1; } 
+        static uint _state_=0; if( raw.empty() ){ _state_=0; return -1; }
     gnStart
 
         try { 
@@ -252,9 +277,7 @@ public: query_t params;
 
         auto len = type::bind( string::to_long( self->headers["Content-Length"] ) );
         auto bon = regex::match( self->headers["Content-Type"], "boundary=[^ ]+" ).slice(9);
-        if ( bon.empty() ){ res( json::parse(
-             query::parse( url::normalize( "?" + self->read() ) )
-        ) ); return; }
+        if ( bon.empty() ){ res(json::parse(query::parse(url::normalize("?"+self->read())))); return; }
 
         process::poll::add([=](){
             if( self->is_closed() ){ rej(except_t( "something went wrong" )); return -1; }
