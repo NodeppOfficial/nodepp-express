@@ -71,13 +71,13 @@ public:
 
     template< class T >
     coEmit( T& str, string_t path ){
-        
+
         if( !str.is_available() ){ return -1; }
         if( *state == 1 )        { return  1; }
 
-        if( str.get_borrow().size()>CHUNK_SIZE ){ 
+        if( str.get_borrow().size()>CHUNK_SIZE ){
             while( wrt(&str,str.get_borrow())==1 );
-            str.set_borrow(nullptr); return 1; 
+            str.del_borrow(); return 1;
         }
 
     gnStart
@@ -87,26 +87,26 @@ public:
             if( !url::is_valid(path) ){
             if( str.params.has(path) ){
                 set( str.params[path] ); while( sop!=match.size() ){
-    
-                reg=match[sop]; cb=new ssr(1); next(); 
+
+                reg=match[sop]; cb=new ssr(1); next();
                 str.get_borrow()+=raw.slice( pos, reg[0] );
                 pos=match[sop][1];sop++;coWait((*cb)(str,dir)==1 );
-    
+
             } coGoto(2);
             } elif( !fs::exists_file( path ) ){ coGoto(1); }
-                
-                file=fs::readable(path); cb=new ssr(1); 
-                rdd =_file_::until(); set( nullptr ); 
-                
+
+                file=fs::readable(path); cb=new ssr(1);
+                rdd =_file_::until(); set( nullptr );
+
                 while( file.is_available() ){
 
                     do { if( pos%2==0 ){ dir="<°"; }
                          if( pos%2!=0 ){ dir="°>"; }
-                         coWait( rdd( &file, dir )==1 ); 
+                         coWait( rdd( &file, dir )==1 );
                     } while(0);
 
                     if( rdd.state<=MAX_PATH && regex::test(rdd.data,dir) ){
-                        pos++; continue; 
+                        pos++; continue;
                     } elif( rdd.state<=MAX_PATH && pos%2!=0 ) {
                         dir=regex::match( rdd.data,"[^<°> \n\t]+" );
                         if( dir.empty() ){ continue; }
@@ -119,11 +119,11 @@ public:
             } else {
 
                 if( url::protocol( path )=="http" ){ do {
-                    
+
                     auto self = type::bind( this );
                     auto strm = type::bind( str );
                     fetch_t args; *state=1;
-                        
+
                     args.url     = path;
                     args.method  = "GET";
                     args.query   = str.query;
@@ -131,22 +131,22 @@ public:
                         { "Params", query::format( str.params ) },
                         { "Host"  , url::hostname( path ) }
                     });
-        
+
                     http::fetch( args ).fail([=](...){ *self->state=0; })
                                        .then([=]( http_t cli ){
-                        if( !str.is_available() ){ return; }
+                        if( !str.is_available() ){ cli.close(); return; }
                         cli.onData([=]( string_t data ){ strm->get_borrow()+=data; });
                         cli.onDrain.once([=](){ *self->state=0; });
                         stream::pipe( cli );
                     });
-        
-                } while(0); coNext; 
+
+                } while(0); coNext;
                 } elif( url::protocol( path )=="https" ) { do {
 
                     ssl_t ssl; fetch_t args; *state=1;
                     auto self = type::bind( this );
                     auto strm = type::bind( str );
-         
+
                     args.url     = path;
                     args.method  = "GET";
                     args.query   = str.query;
@@ -154,15 +154,15 @@ public:
                         { "Params", query::format( str.params ) },
                         { "Host"  , url::hostname( path ) }
                     });
-        
+
                     https::fetch( args, &ssl ).fail([=](...){ *self->state=0; })
                                               .then([=]( https_t cli ){
-                        if( !str.is_available() ){ return; }
+                        if( !str.is_available() ){ cli.close(); return; }
                         cli.onData([=]( string_t data ){ strm->get_borrow()+=data; });
                         cli.onDrain.once([=](){ *self->state=0; });
                         stream::pipe( cli );
                     });
-        
+
                 } while(0); coNext; } coGoto(4);
 
             }
@@ -174,9 +174,9 @@ public:
             str.get_borrow()+=raw.slice( pos, reg[0] );
             pos=match[sop][1];sop++;coWait((*cb)(str,dir)==1 );
 
-        } coGoto(2); } coYield(2); 
-        
-        str.get_borrow()+=raw.slice(pos); coYield(4); 
+        } coGoto(2); } coYield(2);
+
+        str.get_borrow()+=raw.slice(pos); coYield(4);
         if( !(*child) && !str.get_borrow().empty() ){
             coWait( wrt(&str,str.get_borrow())==1 );
             str.set_borrow( nullptr ); coEnd;
@@ -196,8 +196,8 @@ public:
         static uint _state_=0; if( raw.empty() ){ _state_=0; return -1; }
     gnStart
 
-        try { 
-            
+        try {
+
             auto data = regex::search( raw, "\r\n\r\n" ); if( data.empty() ) { coEnd; }
             auto hdr  = raw.splice(0,data[0]); header_t obj;
                         raw.splice(0,4); file->close();
@@ -220,15 +220,15 @@ public:
                      sha.update( obj["filename"] ); sha.update( obj["name"] );
                      sha.update( string::to_string( process::now() ) );
                 obj["path"] = path::join( "/tmp", sha.get() + ".tmp" );
-                *file = fs::writable( obj["path"] ); 
+                *file = fs::writable( obj["path"] );
             }
 
             if( !(*done)[obj["name"]].has_value() ){ (*done)[obj["name"]] = array_t<object_t>(); }
             auto list=(*done)[obj["name"]].as<array_t<object_t>>(); auto name = obj["name"];
             obj.erase("name"); list.push( json::parse( obj ) ); (*done)[name] = list;
 
-        } catch(...) { coEnd; } 
-        
+        } catch(...) { coEnd; }
+
         while( !file->is_closed() ) { file->write( raw ); coNext; }
 
     gnStop };
@@ -400,7 +400,8 @@ public: query_t params;
     const express_http_t& send() const noexcept {
         if( exp->state == 0 ){ return (*this); }
         write_header(exp->status,exp->_headers);
-        exp->state = 0; return (*this);
+        exp->state = 0; this->del_borrow();
+        return (*this);
     }
 
     const express_http_t& done() const noexcept {
