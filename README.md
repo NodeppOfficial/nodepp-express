@@ -1,6 +1,6 @@
 # NODEPP-EXPRESS
 
-A Simple ExpressJS Implementation in [C++/NodePP]([NodePP](https://github.com/NodeppOficial/nodepp)) that supports server side rendering
+This project showcases how to run a familiar Express.js application within the [NodePP](https://github.com/NodeppOficial/nodepp) environment, specifically demonstrating the implementation of server-side rendering. By leveraging NodePP's capabilities, this aims to provide a blend of Express.js's ease of use with potential performance enhancements from C++.
 
 ## Dependencies
 ```bash
