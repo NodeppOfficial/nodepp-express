@@ -1,6 +1,24 @@
 # NODEPP-EXPRESS
 
-This project is a straightforward implementation of the ExpressJS framework within [NodePP](https://github.com/NodeppOficial/nodepp) environment, highlighting the essential aspects of combining these two technologies for web development.
+This project provides a basic and clear implementation of the popular ExpressJS framework running within the [NodePP](https://github.com/NodeppOficial/nodepp) environment. It aims to showcase the fundamental aspects of integrating these two technologies for web development, offering a simple starting point for developers interested in exploring this combination. You'll find the core elements needed to get a basic ExpressJS application up and running within NodePP.
+
+🔗: [Building Web Applications in C++ with ExpressPP: A Comprehensive Guide](https://medium.com/@EDBCBlog/building-web-applications-in-c-with-expresspp-a-comprehensive-guide-895f88314173)
+
+# Features
+- **ExpressPP Functionality:**
+    - **Minimalist Framework:** Leverages the core, unopinionated nature of ExpressJS.
+    - **Powerful Routing:** Utilizes ExpressPP's robust routing system to map URLs to handlers.
+    - **Middleware Support:** Enables the use of ExpressPP middleware for tasks like logging, authentication, etc.
+    - **HTTP Utility Methods:** Provides ExpressPP's convenient methods for handling HTTP requests and responses.
+    - **Static File Serving:** Facilitates serving static assets like CSS, JavaScript, and images.
+    - **RESTful API Development:** Simplifies the creation of RESTful APIs.
+
+- **NodePP Integration:**
+    - **Asynchronous and Event-Driven:** Runs ExpressPP within NodePP's asynchronous, event-driven architecture, built with C++ for high performance.
+    - **Node.js-like API:** Offers a familiar Node.js-style API for writing C++ code.
+    - **High Performance:** Benefits from NodePP's C++ foundation for potentially faster execution.
+    - **Scalability:** Aims to build scalable web applications leveraging NodePP's capabilities.
+    - **Networking Support:** Could potentially utilize NodePP's TCP, TLS, UDP, HTTP, and WebSocket support.
 
 ## Dependencies
 ```bash
