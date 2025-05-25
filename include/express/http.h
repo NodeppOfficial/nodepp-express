@@ -32,12 +32,35 @@
 #include <nodepp/zlib.h>
 #include <nodepp/url.h>
 #include <nodepp/fs.h>
+#include <nodepp/os.h>
 
 /*────────────────────────────────────────────────────────────────────────────*/
 
 #ifndef NODEPP_EXPRESS_GENERATOR
 #define NODEPP_EXPRESS_GENERATOR
 namespace nodepp { namespace _express_ {
+
+GENERATOR( pipe ){
+private:
+
+    _file_::read  _read;
+
+public:
+
+    template< class T, class V > coEmit( const T& inp, const V& out ){
+        if( inp.is_closed() || out.is_closed() ){ return -1; }
+    gnStart inp.onPipe.emit(); out.onPipe.emit();
+        while( inp.is_available() && out.is_available() ){
+        while( _read(&inp) ==1 )           { coNext; }
+           if( _read.state <=0 )           { break;  }
+                inp.onData.emit( _read.data );
+        }       inp.close(); // out.close();
+    gnStop
+    }
+
+};
+
+/*────────────────────────────────────────────────────────────────────────────*/
 
 GENERATOR( ssr ) {
 protected:
@@ -120,9 +143,11 @@ public:
 
                 if( url::protocol( path )=="http" ){ do {
 
+                    fetch_t args; *state=1;
+
                     auto self = type::bind( this );
                     auto strm = type::bind( str );
-                    fetch_t args; *state=1;
+                    auto task = pipe();
 
                     args.url     = path;
                     args.method  = "GET";
@@ -134,18 +159,20 @@ public:
 
                     http::fetch( args ).fail([=](...){ *self->state=0; })
                                        .then([=]( http_t cli ){
-                        if( !str.is_available() ){ cli.close(); return; }
-                        cli.onData([=]( string_t data ){ strm->get_borrow()+=data; });
                         cli.onDrain.once([=](){ *self->state=0; });
-                        stream::pipe( cli );
+                        cli.onData([=]( string_t data ){
+                            strm->get_borrow() +=data;
+                        }); process::poll::add( task, cli, str );
                     });
 
                 } while(0); coNext;
                 } elif( url::protocol( path )=="https" ) { do {
 
                     ssl_t ssl; fetch_t args; *state=1;
+
                     auto self = type::bind( this );
                     auto strm = type::bind( str );
+                    auto task = pipe();
 
                     args.url     = path;
                     args.method  = "GET";
@@ -157,10 +184,10 @@ public:
 
                     https::fetch( args, &ssl ).fail([=](...){ *self->state=0; })
                                               .then([=]( https_t cli ){
-                        if( !str.is_available() ){ cli.close(); return; }
-                        cli.onData([=]( string_t data ){ strm->get_borrow()+=data; });
                         cli.onDrain.once([=](){ *self->state=0; });
-                        stream::pipe( cli );
+                        cli.onData([=]( string_t data ){
+                            strm->get_borrow() +=data;
+                        }); process::poll::add( task, cli, str );
                     });
 
                 } while(0); coNext; } coGoto(4);
@@ -219,7 +246,7 @@ public:
                      sha.update( encoder::key::generate("0123456789abcdef",32) );
                      sha.update( obj["filename"] ); sha.update( obj["name"] );
                      sha.update( string::to_string( process::now() ) );
-                obj["path"] = path::join( "/tmp", sha.get() + ".tmp" );
+                obj["path"] = path::join( os::tmp(),sha.get()+".tmp" );
                 *file = fs::writable( obj["path"] );
             }
 
