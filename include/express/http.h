@@ -51,10 +51,10 @@ public:
         if( inp.is_closed() || out.is_closed() ){ return -1; }
     gnStart inp.onPipe.emit(); out.onPipe.emit();
         while( inp.is_available() && out.is_available() ){
-        while( _read(&inp) ==1 )           { coNext; }
-           if( _read.state <=0 )           { break;  }
-                inp.onData.emit( _read.data );
-        }       inp.close(); // out.close();
+        while( _read(&inp) ==1 ) { coNext; }
+           if( _read.state <=0 ) { break;  }
+               inp.onData.emit( _read.data );
+        }      inp.close(); // out.close();
     gnStop
     }
 
@@ -138,8 +138,7 @@ public:
                         str.get_borrow()+=rdd.data;
                     }
 
-            } coGoto(4);
-            } else {
+            } coGoto(4); } else {
 
                 if( url::protocol( path )=="http" ){ do {
 
@@ -220,43 +219,45 @@ public:
 
     template< class T >
     coEmit( const T& file, const ptr_t<object_t>& done, string_t raw ) {
-        static uint _state_=0; if( raw.empty() ){ _state_=0; return -1; }
+           static uint _state_=0; if( raw.empty() ){ _state_=0; return -1; }
     gnStart
 
-        try {
+        try { if( !regex::test( raw, "Content-Disposition" ) ){ throw ""; }
 
-            auto data = regex::search( raw, "\r\n\r\n" ); if( data.empty() ) { coEnd; }
-            auto hdr  = raw.splice(0,data[0]); header_t obj;
-                        raw.splice(0,4); file->close();
+            auto pos = regex::search( raw, "\r\n\r\n" ); 
+            if ( pos.empty() ) { throw ""; }
+
+            auto hdr = raw.slice( 0, pos[0] );
+            auto bdy = raw.slice( pos[1] );
+            header_t obj;
 
             ptr_t<regex_t> regs ({
                   regex_t( "filename=\"([^\"]+)\"", true ),
-                  regex_t( "content-type: (.+)", true ),
-                  regex_t( "name=\"([^\"]+)\"", true )
-            });
-
+                  regex_t( "content-type: (\\n+)" , true ),
+                  regex_t( "name=\"([^\"]+)\""    , true ),
+            });   
+            
             regs[0].search(hdr); if( !regs[0].get_memory().empty() ){ obj["filename"]=regs[0].get_memory()[0]; }
-            regs[1].search(hdr); if( !regs[1].get_memory().empty() ){ obj["mimetype"]=regs[1].get_memory()[1]; }
-            regs[2].search(hdr); if( !regs[2].get_memory().empty() ){ obj["name"]    =regs[2].get_memory()[2]; }
+            regs[1].search(hdr); if( !regs[1].get_memory().empty() ){ obj["mimetype"]=regs[1].get_memory()[0]; }
+            regs[2].search(hdr); if( !regs[2].get_memory().empty() ){ obj["name"]    =regs[2].get_memory()[0]; }
 
-            for( auto x: obj.keys() ){ if( regex::test( obj[x], "[<\"\'>]|\\N" ) ) { coEnd; } }
-
-            if( !obj.has("filename") ){ (*done)[obj["name"]] = raw; coEnd; } else {
+            if( !obj.has("filename") ){ (*done)[obj["name"]] = bdy; coEnd; } else {
                 auto sha = crypto::hash::SHA256();  sha.update( obj["mimetype"] );
                      sha.update( encoder::key::generate("0123456789abcdef",32) );
                      sha.update( obj["filename"] ); sha.update( obj["name"] );
                      sha.update( string::to_string( process::now() ) );
-                obj["path"] = path::join( os::tmp(),sha.get()+".tmp" );
+                obj["path"] = path::join( os::tmp(), sha.get() + ".tmp" );
                 *file = fs::writable( obj["path"] );
             }
 
             if( !(*done)[obj["name"]].has_value() ){ (*done)[obj["name"]] = array_t<object_t>(); }
             auto list=(*done)[obj["name"]].as<array_t<object_t>>(); auto name = obj["name"];
-            obj.erase("name"); list.push( json::parse( obj ) ); (*done)[name] = list;
+            obj.erase("name"); list.push( json::parse( obj ) ); (*done)[name] = list; 
+            file->write( bdy );
 
-        } catch(...) { coEnd; }
-
-        while( !file->is_closed() ) { file->write( raw ); coNext; }
+        } catch(...) { coEnd; } coYield(2); do {
+            file->write( raw ); return 1;
+        } while(1);
 
     gnStop };
 
@@ -302,26 +303,25 @@ public: query_t params;
     return promise_t<object_t,except_t>( [=]( function_t<void,object_t> res, function_t<void,except_t> rej ){
         if( !self->headers.has("Content-Length") ){ rej( except_t( "content length mismatch" ) ); return; }
 
-        auto len = type::bind( string::to_long( self->headers["Content-Length"] ) );
-        auto bon = regex::match( self->headers["Content-Type"], "boundary=[^ ]+" ).slice(9);
+        auto len = type::bind( string::to_ulong( self->headers["Content-Length"] ) );
+        auto bon = "\r\n--"+regex::match( self->headers["Content-Type"], "boundary=[^ ]+" ).slice(9);
         if ( bon.empty() ){ res(json::parse(query::parse(url::normalize("?"+self->read())))); return; }
 
         process::poll::add([=](){
-            if( self->is_closed() ){ rej(except_t( "something went wrong" )); return -1; }
+            if( self->is_closed() ){ rej("something went wrong"); return -1; }
         coStart
 
-        while( *len>0 && self->is_available() ) {
-           while((*read)( &self, bon )==1){ coNext;    }
-              if( read->data == "--" )    { coGoto(1); }
-              if( read->data == "--\r\n" ){ break; }
-              if( read->data == bon ){
-                //*tsk = type::bind( _express_::inp() );
-                  (*tsk)( file, done, prv->slice(0,-4) );
-                   *prv = nullptr; coGoto(1);
-                } else { (*tsk)( file, done, *prv ); }
-                   *prv = read->data; coYield(1);
-                   *len-= read->state;
-            } res( *done );
+            while( *len>0 && self->is_available() ) { 
+           coWait((*read)( &self, bon )==1 ); *len-=min( read->state,*len );
+               if( read->state== 0         ){ coGoto(1); }
+               if( read->data == "--\r\n"  ){ break;     }
+               if( read->data != bon       ){
+                        (*tsk)(file,done,read->data);
+               } else { (*tsk)(file,done,nullptr   ); }
+            }  
+            
+            res( *done ); coEnd; coYield(1);
+            rej("something went wrong"); 
 
         coStop });
 
