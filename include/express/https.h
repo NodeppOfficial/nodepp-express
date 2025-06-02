@@ -229,19 +229,22 @@ public:
 
             auto hdr = raw.slice( 0, pos[0] );
             auto bdy = raw.slice( pos[1] );
+            auto sby = bdy.slice( 0, 1024 );
             header_t obj;
 
             ptr_t<regex_t> regs ({
                   regex_t( "filename=\"([^\"]+)\"", true ),
                   regex_t( "content-type: (\\n+)" , true ),
                   regex_t( "name=\"([^\"]+)\""    , true ),
+                  regex_t( "^([^\r]+)\r\n"        , true )
             });   
             
             regs[0].search(hdr); if( !regs[0].get_memory().empty() ){ obj["filename"]=regs[0].get_memory()[0]; }
             regs[1].search(hdr); if( !regs[1].get_memory().empty() ){ obj["mimetype"]=regs[1].get_memory()[0]; }
             regs[2].search(hdr); if( !regs[2].get_memory().empty() ){ obj["name"]    =regs[2].get_memory()[0]; }
+            regs[3].search(sby); if( !regs[3].get_memory().empty() ){ sby            =regs[3].get_memory()[0]; } else { sby.clear(); }
 
-            if( !obj.has("filename") ){ (*done)[obj["name"]] = bdy; coEnd; } else {
+            if( !obj.has("filename") ){ (*done)[obj["name"]] = sby; coEnd; } else {
                 auto sha = crypto::hash::SHA256();  sha.update( obj["mimetype"] );
                      sha.update( encoder::key::generate("0123456789abcdef",32) );
                      sha.update( obj["filename"] ); sha.update( obj["name"] );
@@ -296,7 +299,6 @@ public: query_t params;
         auto tsk  = type::bind( _express_::inp() );
         auto read = type::bind( _file_::until() );
         auto done = type::bind( object_t() );
-        auto prv  = type::bind( string_t() );
         auto file = type::bind( file_t() );
         auto self = type::bind( this );
 
@@ -304,7 +306,7 @@ public: query_t params;
         if( !self->headers.has("Content-Length") ){ rej( except_t( "content length mismatch" ) ); return; }
 
         auto len = type::bind( string::to_ulong( self->headers["Content-Length"] ) );
-        auto bon = "\r\n--"+regex::match( self->headers["Content-Type"], "boundary=[^ ]+" ).slice(9);
+        auto bon = "--" + regex::match( self->headers["Content-Type"], "boundary=[^ ]+" ).slice(9);
         if ( bon.empty() ){ res(json::parse(query::parse(url::normalize("?"+self->read())))); return; }
 
         process::poll::add([=](){
@@ -313,15 +315,18 @@ public: query_t params;
 
             while( *len>0 && self->is_available() ) { 
            coWait((*read)( &self, bon )==1 ); *len-=min( read->state,*len );
-               if( read->state== 0         ){ coGoto(1); }
-               if( read->data == "--\r\n"  ){ break;     }
+               if( read->state<= 0         ){ coGoto(1); }
                if( read->data != bon       ){
                         (*tsk)(file,done,read->data);
                } else { (*tsk)(file,done,nullptr   ); }
             }  
             
-            res( *done ); coEnd; coYield(1);
-            rej("something went wrong"); 
+            res(*done); coEnd; coYield(1); do {
+            for( auto x: done->keys() ){
+            if ((*done)[x].is<array_t<object_t>>() ){ 
+            for( auto y:(*done)[x].as<array_t<object_t>>() ){
+                 fs::remove_file( y["path"].as<string_t>() );
+            }}}} while(0); rej("something went wrong"); 
 
         coStop });
 
