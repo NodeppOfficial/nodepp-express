@@ -48,7 +48,6 @@ private:
 public:
 
     template< class T, class V > coEmit( const T& inp, const V& out ){
-        if( inp.is_closed() || out.is_closed() ){ return -1; }
     gnStart inp.onPipe.emit(); out.onPipe.emit();
         while( inp.is_available() && out.is_available() ){
         while( _read(&inp) ==1 ) { coNext; }
@@ -69,6 +68,8 @@ protected:
     ptr_t<bool> child=new bool(0);
     ptr_t<bool> state=new bool(0);
     array_t<ptr_t<ulong>> match;
+
+    zlib_t        zlb = zlib_t(15|16);
     string_t      raw, dir;
     ulong         pos, sop;
     file_t        file;
@@ -93,15 +94,15 @@ public:
     ssr( bool ) : child(new bool(1)) {}
 
     template< class T >
-    coEmit( T& str, string_t path ){
+    coEmit( T& str, string_t path, bool gzip ){
 
         if( !str.is_available() ){ return -1; }
         if( *state == 1 )        { return  1; }
 
         if( str.get_borrow().size()>CHUNK_SIZE ){
-     while( wrt(&str,str.get_borrow())==1 );
-            str.del_borrow(); return 1;
-        }
+        if(!gzip ){ while( wrt(&str,str.get_borrow())==1 ); }
+        else      { while( wrt(&str,zlb.update_deflate(str.get_borrow()))==1 ); }
+        str.del_borrow(); return 1; }
 
     gnStart
 
@@ -113,7 +114,7 @@ public:
 
                 reg=match[sop]; cb=new ssr(1); next();
                 str.get_borrow()+=raw.slice( pos, reg[0] );
-                pos=match[sop][1];sop++;coWait((*cb)(str,dir)==1 );
+                pos=match[sop][1];sop++;coWait((*cb)(str,dir,gzip)==1 );
 
             } coGoto(2);
             } elif( !fs::exists_file( path ) ){ coGoto(1); }
@@ -133,7 +134,7 @@ public:
                     } elif( rdd.state<=MAX_PATH && pos%2!=0 ) {
                         dir=regex::match( rdd.data,"[^<°> \n\t]+" );
                         if( dir.empty() ){ continue; }
-                        coWait((*cb)( str, dir )==1 );
+                        coWait((*cb)( str,dir,gzip )==1 );
                     } else {
                         str.get_borrow()+=rdd.data;
                     }
@@ -198,15 +199,15 @@ public:
 
             reg=match[sop]; cb=new ssr(1); next();
             str.get_borrow()+=raw.slice( pos, reg[0] );
-            pos=match[sop][1];sop++;coWait((*cb)(str,dir)==1 );
+            pos=match[sop][1];sop++;coWait((*cb)(str,dir,gzip)==1 );
 
         } coGoto(2); } coYield(2);
 
         str.get_borrow()+=raw.slice(pos); coYield(4);
-        if( !(*child) && !str.get_borrow().empty() ){
-            coWait( wrt(&str,str.get_borrow())==1 );
-            str.set_borrow( nullptr ); coEnd;
-        }
+        if(!(*child) && !str.get_borrow().empty() ){
+        if(!gzip ){ coWait( wrt(&str,str.get_borrow())==1 ); }
+        else      { coWait( wrt(&str,zlb.update_deflate(str.get_borrow()))==1 ); }
+        str.set_borrow( nullptr ); coEnd; }
 
     gnStop }
 
@@ -219,12 +220,12 @@ public:
 
     template< class T >
     coEmit( const T& file, const ptr_t<object_t>& done, string_t raw ) {
-           static uint _state_=0; if( raw.empty() ){ _state_=0; return -1; }
+        if( raw.empty() ){ _state_=0; return -1; }
     gnStart
 
         try { if( !regex::test( raw, "Content-Disposition" ) ){ throw ""; }
 
-            auto pos = regex::search( raw, "\r\n\r\n" ); 
+            auto pos = regex::search( raw, "\r\n\r\n" );
             if ( pos.empty() ) { throw ""; }
 
             auto hdr = raw.slice( 0, pos[0] );
@@ -237,8 +238,8 @@ public:
                   regex_t( "content-type: (\\n+)" , true ),
                   regex_t( "name=\"([^\"]+)\""    , true ),
                   regex_t( "^([^\r]+)\r\n"        , true )
-            });   
-            
+            });
+
             regs[0].search(hdr); if( !regs[0].get_memory().empty() ){ obj["filename"]=regs[0].get_memory()[0]; }
             regs[1].search(hdr); if( !regs[1].get_memory().empty() ){ obj["mimetype"]=regs[1].get_memory()[0]; }
             regs[2].search(hdr); if( !regs[2].get_memory().empty() ){ obj["name"]    =regs[2].get_memory()[0]; }
@@ -255,7 +256,7 @@ public:
 
             if( !(*done)[obj["name"]].has_value() ){ (*done)[obj["name"]] = array_t<object_t>(); }
             auto list=(*done)[obj["name"]].as<array_t<object_t>>(); auto name = obj["name"];
-            obj.erase("name"); list.push( json::parse( obj ) ); (*done)[name] = list; 
+            obj.erase("name"); list.push( json::parse( obj ) ); (*done)[name] = list;
             file->write( bdy );
 
         } catch(...) { coEnd; } coYield(2); do {
@@ -313,20 +314,20 @@ public: query_t params;
             if( self->is_closed() ){ rej("something went wrong"); return -1; }
         coStart
 
-            while( *len>0 && self->is_available() ) { 
+            while( *len>0 && self->is_available() ) {
            coWait((*read)( &self, bon )==1 ); *len-=min( read->state,*len );
                if( read->state<= 0         ){ coGoto(1); }
                if( read->data != bon       ){
                         (*tsk)(file,done,read->data);
                } else { (*tsk)(file,done,nullptr   ); }
-            }  
-            
+           }
+
             res(*done); coEnd; coYield(1); do {
             for( auto x: done->keys() ){
-            if ((*done)[x].is<array_t<object_t>>() ){ 
+            if ((*done)[x].is<array_t<object_t>>() ){
             for( auto y:(*done)[x].as<array_t<object_t>>() ){
                  fs::remove_file( y["path"].as<string_t>() );
-            }}}} while(0); rej("something went wrong"); 
+            }}}} while(0); rej("something went wrong");
 
         coStop });
 
@@ -413,8 +414,15 @@ public: query_t params;
 
     const express_https_t& render( string_t path ) const noexcept {
         if( exp->state == 0 ){ return (*this); }
-        send(); auto cb = _express_::ssr();
-        process::poll::add( cb, *this, path );
+        auto task = _express_::ssr();
+
+        if( regex::test( headers["Accept-Encoding"], "gzip" ) ){
+            header( "Content-Encoding", "gzip" ); send();
+            process::poll::add( task, *this, path, 1 );
+        } else { send();
+            process::poll::add( task, *this, path, 0 );
+        }
+
         return (*this);
     }
 
