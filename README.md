@@ -1,6 +1,6 @@
 # NODEPP-EXPRESS
 
-This project provides a basic and clear implementation of the popular ExpressJS framework running within the [NodePP](https://github.com/NodeppOficial/nodepp) environment. It aims to showcase the fundamental aspects of integrating these two technologies for web development, offering a simple starting point for developers interested in exploring this combination. You'll find the core elements needed to get a basic ExpressJS application up and running within NodePP.
+This project provides a basic and clear implementation of the popular ExpressJS framework running within the [NodePP](https://github.com/NodeppOfficial/nodepp) environment. It aims to showcase the fundamental aspects of integrating these two technologies for web development, offering a simple starting point for developers interested in exploring this combination. You'll find the core elements needed to get a basic ExpressJS application up and running within NodePP.
 
 🔗: [Building Web Applications in C++ with ExpressPP: A Comprehensive Guide](https://medium.com/@EDBCBlog/building-web-applications-in-c-with-expresspp-a-comprehensive-guide-895f88314173)
 
@@ -31,7 +31,7 @@ This project provides a basic and clear implementation of the popular ExpressJS 
 🐧: sudo apt install zlib1g-dev
 
 # Nodepp
-💻: https://github.com/NodeppOficial/nodepp
+💻: https://github.com/NodeppOfficial/nodepp
 ```
 
 ## Build & Run
