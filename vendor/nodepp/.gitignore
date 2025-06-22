@@ -1,3 +1,4 @@
 main.cpp
 main
-build/
+/www
+.env
