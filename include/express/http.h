@@ -36,8 +36,8 @@
 
 /*────────────────────────────────────────────────────────────────────────────*/
 
-#ifndef NODEPP_EXPRESS_GENERATOR
-#define NODEPP_EXPRESS_GENERATOR
+#ifndef EXPRESS_SERVER_SIDE_RENDERING
+#define EXPRESS_SERVER_SIDE_RENDERING
 namespace nodepp { namespace _express_ {
 
 GENERATOR( pipe ){
@@ -100,8 +100,8 @@ public:
         if( *state == 1 )        { return  1; }
 
         if( str.get_borrow().size()>CHUNK_SIZE ){
-        if(!gzip ){ while( wrt(&str,str.get_borrow())==1 ); }
-        else      { while( wrt(&str,zlb.update_deflate(str.get_borrow()))==1 ); }
+        if(!gzip ){ while( wrt(&str,str.get_borrow())==1 ){/**/} }
+        else      { while( wrt(&str,zlb.update_deflate(str.get_borrow()))==1 ){/**/} }
         str.del_borrow(); return 1; }
 
     gnStart
@@ -263,7 +263,7 @@ public:
             file->write( raw ); return 1;
         } while(1);
 
-    gnStop };
+    gnStop }
 
 };
 
