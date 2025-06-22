@@ -25,20 +25,14 @@ This project provides a basic and clear implementation of the popular ExpressJS 
 # Openssl
 🪟: pacman -S mingw-w64-ucrt-x86_64-openssl
 🐧: sudo apt install libssl-dev
-
-# Zlib
-🪟: pacman -S mingw-w64-ucrt-x86_64-zlib
-🐧: sudo apt install zlib1g-dev
-
-# Nodepp
-💻: https://github.com/NodeppOfficial/nodepp
 ```
 
 ## Build & Run
 ```bash
-🪟: g++ -o main main.cpp -I ./include -lz -lws2_32 -lssl -lcrypto ; ./main
-🐧: g++ -o main main.cpp -I ./include -lz -lssl -lcrypto ; ./main
+🪟: sh build_and_run.sh
+🐧: sh build_and_run.sh
 ```
+### NOTE: If you're building on Linux, make sure to update the `build_and_run.sh` script to point to `./build/server` instead of `./build/Debug/server`
 
 ## Usage
 
