@@ -9,7 +9,7 @@ void onMain() {
 
     auto app = express::https::add( &ssl );
 
-    app.USE([]( express_https_t, function_t<void> next ){
+    app.USE([]( express_https_t cli, function_t<void> next ){
         console::log( "this is a middleware" );
         next();
     });
@@ -17,13 +17,7 @@ void onMain() {
     app.GET("/test",[]( express_https_t cli ){
         cli.status(200)
            .header( "content-type", "text/plain" )
-           .send("this is a test path");
-    });
-
-    app.GET("/render",[]( express_https_t cli ){
-        cli.status(200)
-           .header( "content-type", "text/plain" )
-           .render("<° https://www.google.com °>");
+           .send("this is a test");
     });
 
     app.GET([]( express_https_t cli ){
