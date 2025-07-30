@@ -24,8 +24,8 @@
 
 #include <nodepp/optional.h>
 #include <nodepp/cookie.h>
+#include <nodepp/crypto.h>
 #include <nodepp/stream.h>
-#include <nodepp/https.h>
 #include <nodepp/http.h>
 #include <nodepp/path.h>
 #include <nodepp/json.h>
@@ -38,178 +38,93 @@
 
 #ifndef EXPRESS_SERVER_SIDE_RENDERING
 #define EXPRESS_SERVER_SIDE_RENDERING
-namespace nodepp { namespace _express_ {
-
-GENERATOR( pipe ){
-private:
-
-    _file_::read  _read;
-
-public:
-
-    template< class T, class V > coEmit( const T& inp, const V& out ){
-    gnStart inp.onPipe.emit(); out.onPipe.emit();
-        while( inp.is_available() && out.is_available() ){
-        while( _read(&inp) ==1 ) { coNext; }
-           if( _read.state <=0 ) { break;  }
-               inp.onData.emit( _read.data );
-        }      inp.close(); // out.close();
-    gnStop
-    }
-
-};
-
-/*────────────────────────────────────────────────────────────────────────────*/
+namespace nodepp { namespace generator { namespace express {
 
 GENERATOR( ssr ) {
 protected:
 
-    _file_::until rdd; _file_::write wrt;
-    ptr_t<bool> child=new bool(0);
-    ptr_t<bool> state=new bool(0);
-    array_t<ptr_t<ulong>> match;
-
-    zlib_t        zlb = zlib_t(15|16);
-    string_t      raw, dir;
-    ulong         pos, sop;
-    file_t        file;
-    ptr_t<ulong>  reg;
-    ptr_t<ssr>    cb;
-
-protected:
-
-    void next() {
-    auto war=raw.slice( reg[0], reg[1] );
-         dir=regex::match( war,"[^<°> \n\t]+" );
-    }
-
-    void set( string_t data ){
-        raw  =data; pos=0; sop=0;
-        match=regex::search_all(raw,"<°[^°]+°>");
-    }
+    struct NODE {
+        int wait = 0; string_t borrow;
+        queue_t<string_t> /*--*/ list;
+    };  
+    
+    generator::file::write write;
+    ptr_t<zlib_t> zlb; ptr_t<NODE> obj; 
 
 public:
 
-    ssr()       : child(new bool(0)) {}
-    ssr( bool ) : child(new bool(1)) {}
+    ssr( bool ) noexcept : obj( new NODE() ) { zlb = new zlib_t(15|16); }
+    ssr() /*-*/ noexcept : obj( new NODE() ) { zlb = nullptr; }
 
     template< class T >
-    coEmit( T& str, string_t path, bool gzip ){
+    queue_t<string_t> render( T& str, string_t path ) noexcept { 
+        
+        auto idx = regex::search_all( path, "<°[ ]*|[ ]*°>" );
+        bool b = false; string_t out; ulong off=0;
+        queue_t<string_t> list;
 
-        if( !str.is_available() ){ return -1; }
-        if( *state == 1 )        { return  1; }
+        do{ if ( idx.empty()  ){ list.push( path ); break; }
+            for( auto &x: idx ){
+            list.push( path.slice( off, x[0] ) ); off=x[1]; 
+        }   list.push( path.slice( off ) ); } while(0);
 
-        if( str.get_borrow().size()>CHUNK_SIZE ){
-        if(!gzip ){ while( wrt(&str,str.get_borrow())==1 ){/**/} }
-        else      { while( wrt(&str,zlb.update_deflate(str.get_borrow()))==1 ){/**/} }
-        str.del_borrow(); return 1; }
+        auto x=list.first(); while( x!=nullptr ){
+        auto y=x->next; /*---------------*/ b=!b;
+        
+        if( x->data.empty() ){ x=y; continue; }
+        if( b == true )/*--*/{ x=y; continue; }
 
-    gnStart
+        if( x->data.size() <= MAX_PATH ){
+            
+            if( str->params.has( x->data ) ){ 
+                x->data = str->params[ x->data ];
+            } elif( url::protocol( x->data )=="http" ) {
 
-        if( path.size()<=MAX_PATH ){
+                auto  self = type::bind( this );
+                void* addr = x; 
+                
+                self->obj->wait += 1;
 
-            if( !url::is_valid(path) ){
-            if( str.params.has(path) ){
-                set( str.params[path] ); while( sop!=match.size() ){
+                fetch_t args;
+                args.method  = "GET";
+                args.url     = x->data;
+                args.query   = str->query;
 
-                reg=match[sop]; cb=new ssr(1); next();
-                str.get_borrow()+=raw.slice( pos, reg[0] );
-                pos=match[sop][1];++sop;coWait((*cb)(str,dir,gzip)==1 );
+                args.headers = header_t({
+                    { "Host"  , url::hostname( path ) /*--*/ },
+                    { "Params", query::format( str->params ) }
+                });
 
-            } coGoto(2);
-            } elif( !fs::exists_file( path ) ){ coGoto(1); }
+                http::fetch( args )
+                
+                .then([=]( http_t cli ){
+                    auto x  = list.as( addr );
+                    x->data = nodepp::stream::await( cli );
+                    /*---------------*/ self->obj->wait-=1;
+                })
+                
+                .fail([=]( except_t ){ self->obj->wait -= 1; });
 
-                file=fs::readable(path); cb=new ssr(1);
-                rdd =_file_::until(); set( nullptr );
-
-                while( file.is_available() ){
-
-                    do { if( pos%2==0 ){ dir="<°"; }
-                         if( pos%2!=0 ){ dir="°>"; }
-                         coWait( rdd( &file, dir )==1 );
-                    } while(0);
-
-                    if( rdd.state<=MAX_PATH && regex::test(rdd.data,dir) ){
-                        ++pos; continue;
-                    } elif( rdd.state<=MAX_PATH && pos%2!=0 ) {
-                        dir=regex::match( rdd.data,"[^<°> \n\t]+" );
-                        if( dir.empty() ){ continue; }
-                        coWait((*cb)( str,dir,gzip )==1 );
-                    } else {
-                        str.get_borrow()+=rdd.data;
-                    }
-
-            } coGoto(4); } else {
-
-                if( url::protocol( path )=="http" ){ do {
-
-                    fetch_t args; *state=1;
-
-                    auto self = type::bind( this );
-                    auto strm = type::bind( str );
-                    auto task = pipe();
-
-                    args.url     = path;
-                    args.method  = "GET";
-                    args.query   = str.query;
-                    args.headers = header_t({
-                        { "Params", query::format( str.params ) },
-                        { "Host"  , url::hostname( path ) }
-                    });
-
-                    http::fetch( args ).fail([=](...){ *self->state=0; })
-                                       .then([=]( http_t cli ){
-                        cli.onDrain.once([=](){ *self->state=0; });
-                        cli.onData([=]( string_t data ){
-                            strm->get_borrow() +=data;
-                        }); process::poll::add( task, cli, str );
-                    });
-
-                } while(0); coNext;
-                } elif( url::protocol( path )=="https" ) { do {
-
-                    ssl_t ssl; fetch_t args; *state=1;
-
-                    auto self = type::bind( this );
-                    auto strm = type::bind( str );
-                    auto task = pipe();
-
-                    args.url     = path;
-                    args.method  = "GET";
-                    args.query   = str.query;
-                    args.headers = header_t({
-                        { "Params", query::format( str.params ) },
-                        { "Host"  , url::hostname( path ) }
-                    });
-
-                    https::fetch( args, &ssl ).fail([=](...){ *self->state=0; })
-                                              .then([=]( https_t cli ){
-                        cli.onDrain.once([=](){ *self->state=0; });
-                        cli.onData([=]( string_t data ){
-                            strm->get_borrow() +=data;
-                        }); process::poll::add( task, cli, str );
-                    });
-
-                } while(0); coNext; } coGoto(4);
-
+            } elif( fs::exists_file( x->data ) ){
+                x->data = fs::read_file( x->data );
             }
 
-        } else { coYield(1);
-            set( path ); while( sop!=match.size() ){
+        } x=y; }
 
-            reg=match[sop]; cb=new ssr(1); next();
-            str.get_borrow()+=raw.slice( pos, reg[0] );
-            pos=match[sop][1];++sop;coWait((*cb)(str,dir,gzip)==1 );
+    return list; }
 
-        } coGoto(2); } coYield(2);
+    template< class T >
+    coEmit( T& str, string_t path ){
+    coBegin;
 
-        str.get_borrow()+=raw.slice(pos); coYield(4);
-        if(!(*child) && !str.get_borrow().empty() ){
-        if(!gzip ){ coWait( wrt(&str,str.get_borrow())==1 ); }
-        else      { coWait( wrt(&str,zlb.update_deflate(str.get_borrow()))==1 ); }
-        str.set_borrow( nullptr ); coEnd; }
+        obj->list = render( str, path ); coWait( obj->wait != 0 );
+        obj->borrow = array_t<string_t>( obj->list.data() ).join("");
+        obj->list.clear();
 
-    gnStop }
+          if( !zlb.has_value() ){ coWait( write( &str, obj->borrow )==1 ); }
+        else{ coWait( write( &str, zlb->update_deflate( obj->borrow ))==1 ); }
+
+    coFinish }
 
 };
 
@@ -221,15 +136,15 @@ public:
     template< class T >
     coEmit( const T& file, const ptr_t<object_t>& done, string_t raw ) {
         if( raw.empty() ){ _state_=0; return -1; }
-    gnStart
+    coBegin
 
-        try { if( !regex::test( raw, "Content-Disposition" ) ){ throw ""; }
+        try{ if( !regex::test( raw, "Content-Disposition" ) ){ throw 0; }
 
             auto pos = regex::search( raw, "\r\n\r\n" );
-            if ( pos.empty() ) { throw ""; }
+            if ( pos.empty() ) { throw 0; }
 
             auto hdr = raw.slice( 0, pos[0] );
-            auto bdy = raw.slice( pos[1] );
+            auto bdy = raw.slice(/**/pos[1] );
             auto sby = bdy.slice( 0, 1024 );
             header_t obj;
 
@@ -243,7 +158,8 @@ public:
             regs[0].search(hdr); if( !regs[0].get_memory().empty() ){ obj["filename"]=regs[0].get_memory()[0]; }
             regs[1].search(hdr); if( !regs[1].get_memory().empty() ){ obj["mimetype"]=regs[1].get_memory()[0]; }
             regs[2].search(hdr); if( !regs[2].get_memory().empty() ){ obj["name"]    =regs[2].get_memory()[0]; }
-            regs[3].search(sby); if( !regs[3].get_memory().empty() ){ sby            =regs[3].get_memory()[0]; } else { sby.clear(); }
+            regs[3].search(sby); if( !regs[3].get_memory().empty() ){ sby /*------*/ =regs[3].get_memory()[0]; } 
+                                 else /*-------------------------*/ { sby.clear(); }
 
             if( !obj.has("filename") ){ (*done)[obj["name"]] = sby; coEnd; } else {
                 auto sha = crypto::hash::SHA256();  sha.update( obj["mimetype"] );
@@ -259,15 +175,13 @@ public:
             obj.erase("name"); list.push( json::parse( obj ) ); (*done)[name] = list;
             file->write( bdy );
 
-        } catch(...) { coEnd; } coYield(2); do {
-            file->write( raw ); return 1;
-        } while(1);
+        } catch(...) { coEnd; } do { coNext; file->write(raw); } while(1);
 
-    gnStop }
+    coFinish }
 
 };
 
-}}
+}}}
 #endif
 
 /*────────────────────────────────────────────────────────────────────────────*/
@@ -285,7 +199,7 @@ protected:
 public: query_t params;
 
     express_http_t ( http_t& cli ) noexcept : http_t( cli ), exp( new NODE() ) { exp->state = 1; }
-   ~express_http_t () noexcept { if( exp.count() > 1 ){ return; } exp->state=0; free(); }
+    virtual ~express_http_t () noexcept { if( exp.count() > 1 ){ return; } exp->state=0; free(); }
     express_http_t () noexcept : exp( new NODE() ) { exp->state = 0; }
 
     /*.........................................................................*/
@@ -297,8 +211,8 @@ public: query_t params;
 
     promise_t<object_t,except_t> parse_stream() const noexcept {
 
-        auto tsk  = type::bind( _express_::inp() );
-        auto read = type::bind( _file_::until() );
+        auto tsk  = type::bind( generator::express::inp() );
+        auto read = type::bind( generator::file::until() );
         auto done = type::bind( object_t() );
         auto file = type::bind( file_t() );
         auto self = type::bind( this );
@@ -310,12 +224,12 @@ public: query_t params;
         auto bon = "--" + regex::match( self->headers["Content-Type"], "boundary=[^ ]+" ).slice(9);
         if ( bon.empty() ){ res(json::parse(query::parse(url::normalize("?"+self->read())))); return; }
 
-        process::poll::add([=](){
+        process::add( coroutine::add( COROUTINE(){
             if( self->is_closed() ){ rej("something went wrong"); return -1; }
-        coStart
+        coBegin
 
             while( *len>0 && self->is_available() ) {
-           coWait((*read)( &self, bon )==1 ); *len-=min( read->state,*len );
+           coWait((*read)( &self, bon )==1 ); *len-=min( (ulong) read->state,*len );
                if( read->state<= 0         ){ coGoto(1); }
                if( read->data != bon       ){
                         (*tsk)(file,done,read->data);
@@ -329,7 +243,8 @@ public: query_t params;
                  fs::remove_file( y["path"].as<string_t>() );
             }}}} while(0); rej("something went wrong");
 
-        coStop });
+        coFinish 
+        }));
 
     }); }
 
@@ -414,13 +329,33 @@ public: query_t params;
 
     const express_http_t& render( string_t path ) const noexcept {
         if( exp->state == 0 ){ return (*this); }
-        auto task = _express_::ssr();
+        
+        auto self = type::bind( this );
 
         if( regex::test( headers["Accept-Encoding"], "gzip" ) ){
-            header( "Content-Encoding", "gzip" ); send();
-            process::poll::add( task, *this, path, 1 );
-        } else { send();
-            process::poll::add( task, *this, path, 0 );
+            auto task = generator::express::ssr( true );
+            header( "Content-Encoding", "gzip" );
+            send(); process::await( task, self, path );
+        } else { 
+            auto task = generator::express::ssr();
+            send(); process::await( task, self, path );
+        }
+
+        return (*this);
+    }
+
+    const express_http_t& render( file_t file ) const noexcept {
+        if( exp->state == 0 ){ return (*this); }
+        
+        auto self = type::bind( this );
+
+        if( regex::test( headers["Accept-Encoding"], "gzip" ) ){
+            auto task = generator::express::ssr( true );
+            header( "Content-Encoding", "gzip" );
+            send(); process::await( task, self, stream::await( file ) );
+        } else { 
+            auto task = generator::express::ssr();
+            send(); process::await( task, self, stream::await( file ) );
         }
 
         return (*this);
