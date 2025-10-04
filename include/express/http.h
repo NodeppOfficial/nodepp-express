@@ -388,8 +388,8 @@ protected:
 
     struct NODE {
         queue_t<express_item_t> list;
-        agent_t* agent= nullptr;
-        string_t path = nullptr;
+        ptr_t<agent_t> agent=nullptr;
+        string_t       path =nullptr;
         tcp_t    fd;
     };  ptr_t<NODE> obj;
 
@@ -445,9 +445,10 @@ protected:
 
 public:
 
-    express_tcp_t( agent_t* agent ) noexcept : obj( new NODE() ){ obj->agent = agent; }
-    express_tcp_t() noexcept : obj( new NODE() ) {}
-
+    express_tcp_t( agent_t* agent=nullptr ) noexcept : obj( new NODE() ){ 
+        obj->agent = type::bind( agent ); 
+    }
+    
     /*.........................................................................*/
 
     void     set_path( string_t path ) const noexcept { obj->path = path; }
@@ -628,7 +629,7 @@ public:
             }   self->run( nullptr, res );
         };
 
-        obj->fd=http::server( cb, obj->agent );
+        obj->fd=http::server( cb, &obj->agent );
         obj->fd.listen( args... ); return obj->fd;
     }
 

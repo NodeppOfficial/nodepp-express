@@ -388,9 +388,10 @@ protected:
 
     struct NODE {
         queue_t<express_item_t> list;
-        string_t path; tls_t fd;
-        ptr_t<agent_t> agent;
-        ptr_t<ssl_t>   ssl;
+        ptr_t<agent_t> agent=nullptr;
+        ptr_t<ssl_t>   ssl  =nullptr;
+        string_t       path =nullptr;
+        tls_t fd;
     };  ptr_t<NODE> obj;
 
     void execute( string_t path, express_item_t& data, express_https_t& cli, function_t<void>& next ) const noexcept {
@@ -445,13 +446,10 @@ protected:
 
 public:
 
-    express_tls_t( ssl_t* ssl, agent_t* agent ) noexcept : obj( new NODE() )
-                 { obj->agent = type::bind( agent ); obj->ssl = type::bind( ssl ); }
-
-    express_tls_t( ssl_t* ssl ) noexcept : obj( new NODE() )
-                 { obj->ssl = type::bind( ssl ); }
-
-    express_tls_t() noexcept : obj( new NODE() ) {}
+    express_tls_t( ssl_t* ssl=nullptr, agent_t* agent=nullptr ) noexcept : obj( new NODE() ){ 
+        obj->agent = type::bind( agent ); 
+        obj->ssl   = type::bind( ssl );
+    }
 
     /*.........................................................................*/
 
