@@ -134,7 +134,7 @@ public:
             auto bdy = raw.slice(/**/pos[1] );
             auto sby = bdy.slice( 0, 1024   ); header_t obj;
 
-            static ptr_t<regex_t> regs ({
+            thread_local static ptr_t<regex_t> regs ({
                 regex_t( "filename=\"([^\"]+)\"", true ),
                 regex_t( "content-type: (\\n+)" , true ),
                 regex_t( "name=\"([^\"]+)\""    , true ),
@@ -241,9 +241,9 @@ public: query_t params;
     /*.........................................................................*/
 
     const express_https_t& send( string_t msg ) const noexcept {
-        if( exp->state == 0 ){ return (*this); }
+        if( exp->state == 0 ){ return (*this); } static regex_t reg( "gzip", true );
         header( "Content-Length", string::to_string(msg.size()) );
-        if( regex::test( headers["Accept-Encoding"], "gzip" ) && msg.size()>UNBFF_SIZE ){
+        if( reg.test( headers["Accept-Encoding"] ) && msg.size()>UNBFF_SIZE ){
             header( "Content-Encoding", "gzip" ); send();
             write( zlib::gzip::get( msg ) ); close();
         } else {
@@ -252,11 +252,12 @@ public: query_t params;
     }
 
     const express_https_t& send_file( string_t dir ) const noexcept {
-        if( exp->state == 0 ){ return (*this); } if( fs::exists_file( dir ) == false )
+        if( exp->state == 0 ){ return (*this); } static regex_t reg( "gzip", true );
+        if( fs::exists_file( dir ) == false )
           { status(404).send("file does not exist"); } file_t file ( dir, "r" );
             header( "Content-Length", string::to_string(file.size()) );
             header( "Content-Type", path::mimetype(dir) );
-        if( regex::test( headers["Accept-Encoding"], "gzip" ) ){
+        if( reg.test( headers["Accept-Encoding"] ) ){
             header( "Content-Encoding", "gzip" ); send();
             zlib::gzip::pipe( file, *this );
         } else {
@@ -296,8 +297,8 @@ public: query_t params;
 
     template< class T >
     const express_https_t& send_stream( T readableStream ) const noexcept {
-        if( exp->state == 0 ){ return (*this); }
-        if( regex::test( headers["Accept-Encoding"], "gzip" ) ){
+        if( exp->state == 0 ){ return (*this); } static regex_t reg( "gzip", true );
+        if( reg.test( headers["Accept-Encoding"] ) ){
             header( "Content-Encoding", "gzip" ); send();
             zlib::gzip::pipe( readableStream, *this );
         } else { send();
@@ -322,8 +323,9 @@ public: query_t params;
         if( exp->state == 0 ){ return (*this); }
 
         auto self = type::bind( this );
+        static regex_t reg( "gzip", true );
 
-        if( regex::test( headers["Accept-Encoding"], "gzip" ) ){
+        if( reg.test( headers["Accept-Encoding"] ) ){
             auto task = express::ssr( true );
             header( "Content-Encoding", "gzip" );
             send(); process::add( task, self, path );
@@ -339,8 +341,9 @@ public: query_t params;
         if( exp->state == 0 ){ return (*this); }
 
         auto self = type::bind( this );
+        static regex_t reg( "gzip", true );
 
-        if( regex::test( headers["Accept-Encoding"], "gzip" ) ){
+        if( reg.test( headers["Accept-Encoding"] ) ){
             auto task = express::ssr( true );
             header( "Content-Encoding", "gzip" );
             send(); process::add( task, self, stream::await( file ) );
@@ -648,10 +651,16 @@ namespace nodepp { namespace express { namespace https {
 
     inline express_tls_t file( string_t base ) { express_tls_t app;
 
+        static ptr_t<regex_t> reg ({
+            regex_t( "audio|video", true ),
+            regex_t( "\\.[.]+/" ),
+            regex_t( "\\d+"     )
+        });
+
         app.ALL([=]( express_https_t& cli ){ try {
 
             auto pth = regex::replace( cli.path, app.get_path().slice(1), "/" );
-                 pth = regex::replace_all( pth, "\\.[.]+/", "" );
+                 pth = reg[1].replace_all( pth, "" );
 
             auto dir = pth.empty()? path::join( base, "" ):
             /*-------------------*/ path::join( base,pth );
@@ -667,7 +676,7 @@ namespace nodepp { namespace express { namespace https {
 
             if( !cli.headers.has("Range") ){
 
-                if( regex::test(path::mimetype(dir),"audio|video",true) )
+                if( reg[0].test(path::mimetype(dir)) )
                   { cli.send(); return; }
 
                 cli.header( "Cache-Control", "public, max-age=604800" );
@@ -676,7 +685,7 @@ namespace nodepp { namespace express { namespace https {
 
             } else {
 
-                array_t<string_t> range = regex::match_all(cli.headers["Range"],"\\d+",true);
+                array_t<string_t> range = reg[2].match_all(cli.headers["Range"]);
                    ulong rang[3]; rang[0] = string::to_ulong( range[0] );
                          rang[1] =min(rang[0]+CHUNK_MB(10),str.size()-1);
                          rang[2] =min(rang[0]+CHUNK_MB(10),str.size()  );

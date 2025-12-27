@@ -4,6 +4,41 @@ This project provides a basic and clear implementation of the popular ExpressJS 
 
 🔗: [Building Web Applications in C++ with ExpressPP: A Comprehensive Guide](https://medium.com/@EDBCBlog/building-web-applications-in-c-with-expresspp-a-comprehensive-guide-895f88314173)
 
+## Dependencies & Cmake Integration
+```bash
+# Openssl
+    🪟: pacman -S mingw-w64-ucrt-x86_64-openssl
+    🐧: sudo apt install libssl-dev
+# Zlib
+    🪟: pacman -S mingw-w64-ucrt-x86_64-zlib
+    🐧: sudo apt install zlib1g-dev
+```
+```bash
+include(FetchContent)
+
+FetchContent_Declare(
+	nodepp
+	GIT_REPOSITORY   https://github.com/NodeppOfficial/nodepp
+	GIT_TAG          origin/main
+	GIT_PROGRESS     ON
+)
+FetchContent_MakeAvailable(nodepp)
+
+FetchContent_Declare(
+	nodepp-express
+	GIT_REPOSITORY   https://github.com/NodeppOfficial/nodepp-express
+	GIT_TAG          origin/main
+	GIT_PROGRESS     ON
+)
+FetchContent_MakeAvailable(nodepp-express)
+
+#[...]
+
+target_link_libraries( #[...]
+	PUBLIC nodepp nodepp-express #[...]
+)
+```
+
 # Features
 - **ExpressPP Functionality:**
     - **Minimalist Framework:** Leverages the core, unopinionated nature of ExpressJS.
@@ -19,20 +54,6 @@ This project provides a basic and clear implementation of the popular ExpressJS 
     - **High Performance:** Benefits from NodePP's C++ foundation for potentially faster execution.
     - **Scalability:** Aims to build scalable web applications leveraging NodePP's capabilities.
     - **Networking Support:** Could potentially utilize NodePP's TCP, TLS, UDP, HTTP, and WebSocket support.
-
-## Dependencies
-```bash
-# Openssl
-🪟: pacman -S mingw-w64-ucrt-x86_64-openssl
-🐧: sudo apt install libssl-dev
-
-# Zlib
-🪟: pacman -S mingw-w64-ucrt-x86_64-zlib
-🐧: sudo apt install zlib1g-dev
-
-# Nodepp
-💻: https://github.com/NodeppOfficial/nodepp
-```
 
 ## Build & Run
 ```bash
@@ -72,5 +93,4 @@ void onMain() {
 ```
 
 ## License
-
-**Nodepp** is distributed under the MIT License. See the LICENSE file for more details.
+**Nodepp-express** is distributed under the MIT License. See the LICENSE file for more details.
