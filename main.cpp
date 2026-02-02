@@ -1,26 +1,42 @@
 #include <nodepp/nodepp.h>
-#include <nodepp/fs.h>
-#include <express.h>
+#include <express/http.h>
+#include <nodepp/cluster.h>
 
 using namespace nodepp;
 
 void onMain() {
 
-    express_t app;
+    /*
+    for( auto x=os::cpus(); x-->0; ){
+    if ( process::is_child() ){ break; }
+         cluster::add();
+    }
 
-    app.GET([]( express_cli_t cli ){
-        cli.sendJSON(object_t({
-            { "arrg", array_t<int>({ 10, 20, 30, 40, 50, 60 }) },
-            { "var2", "adios mundo" },
-            { "var1", "hola mundo" },
-            { "emoji", "🫠" },
-            { "bool", true },
-            { "int", 50000 }
-        }));
+    if ( process::is_parent() ){ 
+         console::log( "task spawned" );    
+    return; }
+    */
+
+    auto app = express::http::add();
+
+    app.GET( "/test/:uid", [=]( express_http_t cli ){
+        
+        cli.send( regex::format( _STRING_(
+            <h1> ${0} </h1>
+            <h2> ${1} </h2>
+        ), cli.params["uid"], cli.search ));
+
     });
 
+    app.GET([=]( express_http_t cli ){
+        cli.send( "hello world!" );
+    });
+
+//  app.USE( express::http::file( "./www" ) );
+
     app.listen( "localhost", 8000, []( ... ){
-        console::log( "hola mundo" );
+        console::log( "server started at:" );
+        console::log( "http://localhost:8000" );
     });
 
 }
