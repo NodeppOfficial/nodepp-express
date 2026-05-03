@@ -6,8 +6,21 @@ using namespace nodepp;
 express_tcp_t adminHandler(){
 
     auto app = express::http::add();
-    
-    app.GET("/:di",[]( express_http_t cli ){
+
+    app.USE([]( express_http_t cli, function_t<void> next ){
+        if( cli.headers["Auth"].empty() )
+          { cli.send("you are not an admin"); return; }
+        console::log( "hello world admin" ); next();
+    });
+
+    app.GET("/:id",[]( express_http_t cli ){
+        string_t message;
+        message += "id:" + cli.params["id"] + "\n";
+        message += "normal method";
+        cli.send( message );
+    });
+
+    app.GET("/:id/:di",[]( express_http_t cli ){
         string_t message;
         message += "id:" + cli.params["id"] + "\n";
         message += "di:" + cli.params["di"] + "\n";
@@ -15,7 +28,7 @@ express_tcp_t adminHandler(){
         cli.send( message );
     });
 
-    app.GET("/pupu/:di",[]( express_http_t cli ){
+    app.GET("/:id/pupu/:di",[]( express_http_t cli ){
         string_t message;
         message += "id:" + cli.params["id"] + "\n";
         message += "di:" + cli.params["di"] + "\n";
@@ -86,13 +99,9 @@ void onMain() {
 
     auto app = express::http::add();
 
-    app.USE( [=]( express_http_t cli, function_t<void> next ){
-        console::log( "middle ware" );
-    next(); });
-
     app.USE( "/api", restFull() );
 
-    app.USE( "/admin/:id", adminHandler() );
+    app.USE( "/admin", adminHandler() );
 
     app.USE( "/user", normalHandler() );
 
