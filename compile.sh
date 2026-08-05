@@ -1,0 +1,1 @@
+time g++ -o main main.cpp -I./include -lssl -lcrypto -lz ; ./main
