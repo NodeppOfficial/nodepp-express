@@ -21,8 +21,6 @@ void onMain() {
 
     app.GET( []( express_http_t cli ){
 
-        console::log( ">>", cli.get_fd() );
-
         cli.header( "Content-Type", "text/html" );
         cli.send  ( NODEPP_STRINGIFY (
 
