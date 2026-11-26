@@ -1,26 +1,43 @@
 #include <nodepp/nodepp.h>
-#include <nodepp/fs.h>
-#include <express.h>
+#include <express/http.h>
 
 using namespace nodepp;
 
 void onMain() {
 
-    express_t app;
+    auto app = express::http::add();
 
-    app.GET([]( express_cli_t cli ){
-        cli.sendJSON(object_t({
-            { "arrg", array_t<int>({ 10, 20, 30, 40, 50, 60 }) },
-            { "var2", "adios mundo" },
-            { "var1", "hola mundo" },
-            { "emoji", "🫠" },
-            { "bool", true },
-            { "int", 50000 }
-        }));
-    });
+    app.POST( "/file", []( express_http_t cli ){
 
-    app.listen( "localhost", 8000, []( ... ){
-        console::log( "hola mundo" );
+        cli.parse_stream().then([=]( object_t obj ){
+            console::log( ">>", json::stringify( obj ) );
+            cli.header( "Content-Type", "text/html" );
+            cli.send  (" done ");
+        }).fail([=]( except_t err ){
+            console::log( ">>", err );
+        });
+
+    } );
+
+    app.GET( []( express_http_t cli ){
+
+        console::log( ">>", cli.get_fd() );
+
+        cli.header( "Content-Type", "text/html" );
+        cli.send  ( NODEPP_STRINGIFY (
+
+            <form action="/file" enctype="multipart/form-data" method="POST">
+                <h1> Send File </h1>
+                <input type="file" name="file" />
+                <input type="submit" />
+            </form>
+
+        ) );
+
+    } );
+
+    app.listen( "localhost", 8000, []( socket_t ){
+        console::log( "server started at http://localhost:8000" );
     });
 
 }
